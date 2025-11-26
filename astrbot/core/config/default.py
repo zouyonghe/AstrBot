@@ -2281,7 +2281,7 @@ CONFIG_METADATA_3 = {
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
                     "provider_settings.reachability_check": {
-                        "description": "Provider 可达性检测",
+                        "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。",
                     },
