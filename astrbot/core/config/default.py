@@ -2283,7 +2283,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
-                        "hint": "/provider 命令列出模型时是否并发检测连通性。",
+                        "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
                     },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",
