@@ -182,7 +182,7 @@ class ProviderCommands:
                 if all_providers:
                     await event.send(
                         MessageEventResult().message(
-                            "正在进行可达性检测，正在测试提供商，请稍候..."
+                            "正在进行提供商可达性测试，请稍候..."
                         )
                     )
                 check_results = await asyncio.gather(
