@@ -1,4 +1,5 @@
 import ntpath
+import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,6 +125,10 @@ class _FakeZipArchive:
 
     def extractall(self, target_dir: str) -> None:  # noqa: ARG002
         return None
+
+
+def _build_fake_archive_entries(archive_root: str) -> list[str]:
+    return [archive_root, posixpath.join(archive_root, ".dockerignore")]
 
 
 def _build_fake_httpx_module(state: _FakeAsyncClientState) -> SimpleNamespace:
@@ -420,13 +425,22 @@ async def test_download_file_logs_url_and_target_path_on_failure(
     assert any(str(target_path) in message for message in log_messages)
 
 
+@pytest.mark.parametrize(
+    "archive_root",
+    [
+        "AstrBotDevs-AstrBot-39386ee/",
+        "AstrBotDevs-AstrBot-39386ee",
+        "owner-repo-branch/subdir/",
+        ".",
+    ],
+)
 def test_repo_unzip_file_normalizes_windows_extended_length_paths(
     monkeypatch: pytest.MonkeyPatch,
+    archive_root: str,
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
     target_dir = r"\\?\\C:\\Users\\admin\\AppData\\Local\\AstrBot\\backend\\app"
-    archive_root = "AstrBotDevs-AstrBot-39386ee/"
     expected_root = ntpath.normpath(ntpath.join(target_dir, archive_root))
     expected_file = ntpath.normpath(
         ntpath.join(target_dir, archive_root, ".dockerignore")
@@ -447,9 +461,7 @@ def test_repo_unzip_file_normalizes_windows_extended_length_paths(
     monkeypatch.setattr(
         zip_updator_module.zipfile,
         "ZipFile",
-        lambda path, mode: _FakeZipArchive(
-            [archive_root, f"{archive_root}.dockerignore"]
-        ),
+        lambda path, mode: _FakeZipArchive(_build_fake_archive_entries(archive_root)),
     )
     monkeypatch.setattr(zip_updator_module.logger, "debug", lambda message: None)
     monkeypatch.setattr(zip_updator_module.logger, "warning", lambda message: None)
@@ -504,9 +516,7 @@ def test_plugin_unzip_file_normalizes_windows_extended_length_paths(
     monkeypatch.setattr(
         plugin_updator_module.zipfile,
         "ZipFile",
-        lambda path, mode: _FakeZipArchive(
-            [archive_root, f"{archive_root}.dockerignore"]
-        ),
+        lambda path, mode: _FakeZipArchive(_build_fake_archive_entries(archive_root)),
     )
     monkeypatch.setattr(plugin_updator_module.logger, "info", lambda message: None)
     monkeypatch.setattr(plugin_updator_module.logger, "warning", lambda message: None)
