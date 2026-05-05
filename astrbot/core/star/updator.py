@@ -78,11 +78,12 @@ class PluginUpdator(RepoZipUpdator):
             update_dir = self._normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
 
-        update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
+        target_root_path = self._normalize_archive_path(target_dir)
+        update_root_path = self._normalize_archive_path(target_root_path, update_dir)
         files = os.listdir(update_root_path)
         for f in files:
-            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
-            target_item_path = os.path.normpath(os.path.join(target_dir, f))
+            update_item_path = self._normalize_archive_path(update_root_path, f)
+            target_item_path = self._normalize_archive_path(target_root_path, f)
             if os.path.isdir(update_item_path):
                 if os.path.exists(target_item_path):
                     shutil.rmtree(target_item_path, onerror=on_error)

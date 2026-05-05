@@ -232,8 +232,12 @@ class RepoZipUpdator:
         raise ValueError("无效的 GitHub URL")
 
     @staticmethod
+    def _normalize_archive_path(*parts: str) -> str:
+        return os.path.normpath(os.path.join(*parts))
+
+    @staticmethod
     def _normalize_archive_root_dir(path: str) -> str:
-        normalized = os.path.normpath(path)
+        normalized = RepoZipUpdator._normalize_archive_path(path)
         return "" if normalized == "." else normalized
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
@@ -245,11 +249,12 @@ class RepoZipUpdator:
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
-        update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
+        target_root_path = self._normalize_archive_path(target_dir)
+        update_root_path = self._normalize_archive_path(target_root_path, update_dir)
         files = os.listdir(update_root_path)
         for f in files:
-            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
-            target_item_path = os.path.normpath(os.path.join(target_dir, f))
+            update_item_path = self._normalize_archive_path(update_root_path, f)
+            target_item_path = self._normalize_archive_path(target_root_path, f)
             if os.path.isdir(update_item_path):
                 if os.path.exists(target_item_path):
                     shutil.rmtree(target_item_path, onerror=on_error)
