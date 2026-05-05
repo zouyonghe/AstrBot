@@ -5,6 +5,7 @@ import zipfile
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.core.utils.io import ensure_dir, on_error, remove_dir
+from astrbot.core.zip_updator import normalize_archive_root_dir
 
 from ..star.star import StarMetadata
 from ..updator import RepoZipUpdator
@@ -75,8 +76,17 @@ class PluginUpdator(RepoZipUpdator):
         update_dir = ""
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = self._normalize_archive_root_dir(z.namelist()[0])
+            update_dir = normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
+
+        if not update_dir:
+            try:
+                os.remove(zip_path)
+            except BaseException:
+                logger.warning(
+                    f"Failed to remove update files; you can manually delete {zip_path}",
+                )
+            return
 
         update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
         files = os.listdir(update_root_path)

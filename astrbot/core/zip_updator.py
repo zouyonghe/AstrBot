@@ -13,6 +13,11 @@ from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
+def normalize_archive_root_dir(path: str) -> str:
+    normalized = os.path.normpath(path)
+    return "" if normalized == "." else normalized
+
+
 class ReleaseInfo:
     version: str
     published_at: str
@@ -231,19 +236,21 @@ class RepoZipUpdator:
             return author, repo, branch
         raise ValueError("无效的 GitHub URL")
 
-    @staticmethod
-    def _normalize_archive_root_dir(path: str) -> str:
-        normalized = os.path.normpath(path)
-        return "" if normalized == "." else normalized
-
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         ensure_dir(target_dir)
         update_dir = ""
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = self._normalize_archive_root_dir(z.namelist()[0])
+            update_dir = normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
+
+        if not update_dir:
+            try:
+                os.remove(zip_path)
+            except BaseException:
+                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
+            return
 
         update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
         files = os.listdir(update_root_path)
