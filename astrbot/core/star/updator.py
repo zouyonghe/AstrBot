@@ -57,25 +57,28 @@ class PluginUpdator(RepoZipUpdator):
         update_dir = ""
         logger.info(f"正在解压压缩包: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = z.namelist()[0]
+            update_dir = self._normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
+        update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
+        files = os.listdir(update_root_path)
         for f in files:
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            elif os.path.exists(os.path.join(target_dir, f)):
-                os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
+            target_item_path = os.path.normpath(os.path.join(target_dir, f))
+            if os.path.isdir(update_item_path):
+                if os.path.exists(target_item_path):
+                    shutil.rmtree(target_item_path, onerror=on_error)
+            elif os.path.exists(target_item_path):
+                os.remove(target_item_path)
+            shutil.move(update_item_path, target_dir)
 
         try:
             logger.info(
-                f"删除临时文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除临时文件: {zip_path} 和 {update_root_path}",
             )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+            shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
         except BaseException:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}",
             )

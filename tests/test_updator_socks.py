@@ -1,3 +1,4 @@
+import ntpath
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,6 +7,7 @@ import certifi
 import httpx
 import pytest
 
+from astrbot.core.star.updator import PluginUpdator
 from astrbot.core.zip_updator import RepoZipUpdator
 
 
@@ -107,6 +109,23 @@ class _FakeFailingStreamAsyncClient:
         return _FakeFailingStreamResponse()
 
 
+class _FakeZipArchive:
+    def __init__(self, names: list[str]):
+        self._names = names
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def namelist(self) -> list[str]:
+        return self._names
+
+    def extractall(self, target_dir: str) -> None:  # noqa: ARG002
+        return None
+
+
 def _build_fake_httpx_module(state: _FakeAsyncClientState) -> SimpleNamespace:
     class _FakeAsyncClient:
         def __init__(self, **kwargs):
@@ -187,7 +206,9 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
             "zipball_url": "https://example.com/astrbot.zip",
         }
     ]
-    assert fake_async_client_state.requested_urls == ["https://api.soulter.top/releases"]
+    assert fake_async_client_state.requested_urls == [
+        "https://api.soulter.top/releases"
+    ]
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
     assert fake_async_client_state.init_kwargs["timeout"] == 30.0
@@ -221,7 +242,9 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
         zip_updator_module,
         "download_file",
         lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("download_from_repo_url should not use aiohttp download_file")
+            AssertionError(
+                "download_from_repo_url should not use aiohttp download_file"
+            )
         ),
         raising=False,
     )
@@ -357,3 +380,117 @@ async def test_download_file_logs_url_and_target_path_on_failure(
 
     assert any(url in message for message in log_messages)
     assert any(str(target_path) in message for message in log_messages)
+
+
+def test_repo_unzip_file_normalizes_windows_extended_length_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    target_dir = r"\\?\\C:\\Users\\admin\\AppData\\Local\\AstrBot\\backend\\app"
+    archive_root = "AstrBotDevs-AstrBot-39386ee/"
+    expected_root = ntpath.normpath(ntpath.join(target_dir, archive_root))
+    expected_file = ntpath.normpath(
+        ntpath.join(target_dir, archive_root, ".dockerignore")
+    )
+    captured: dict[str, object] = {}
+
+    def fake_listdir(path: str) -> list[str]:
+        captured.setdefault("listdir", path)
+        return [".dockerignore"]
+
+    monkeypatch.setattr(
+        zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
+    )
+    monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
+    monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
+    monkeypatch.setattr(zip_updator_module.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(zip_updator_module.os.path, "exists", lambda path: False)
+    monkeypatch.setattr(
+        zip_updator_module.zipfile,
+        "ZipFile",
+        lambda path, mode: _FakeZipArchive(
+            [archive_root, f"{archive_root}.dockerignore"]
+        ),
+    )
+    monkeypatch.setattr(zip_updator_module.logger, "debug", lambda message: None)
+    monkeypatch.setattr(zip_updator_module.logger, "warning", lambda message: None)
+    monkeypatch.setattr(zip_updator_module.os, "listdir", fake_listdir)
+    monkeypatch.setattr(
+        zip_updator_module.shutil,
+        "move",
+        lambda src, dst: captured.setdefault("move", (src, dst)),
+    )
+    monkeypatch.setattr(
+        zip_updator_module.shutil,
+        "rmtree",
+        lambda path, onerror=None: captured.setdefault("cleanup", path),
+    )
+    monkeypatch.setattr(
+        zip_updator_module.os,
+        "remove",
+        lambda path: captured.setdefault("removed", path),
+    )
+
+    RepoZipUpdator().unzip_file("temp.zip", target_dir)
+
+    assert captured["listdir"] == expected_root
+    assert captured["move"] == (expected_file, target_dir)
+    assert captured["cleanup"] == expected_root
+
+
+def test_plugin_unzip_file_normalizes_windows_extended_length_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.star.updator as plugin_updator_module
+
+    target_dir = r"\\?\\C:\\Users\\admin\\AppData\\Local\\AstrBot\\data\\plugins\\demo"
+    archive_root = "AstrBotDevs-demo-39386ee/"
+    expected_root = ntpath.normpath(ntpath.join(target_dir, archive_root))
+    expected_file = ntpath.normpath(
+        ntpath.join(target_dir, archive_root, ".dockerignore")
+    )
+    captured: dict[str, object] = {}
+
+    def fake_listdir(path: str) -> list[str]:
+        captured.setdefault("listdir", path)
+        return [".dockerignore"]
+
+    monkeypatch.setattr(
+        plugin_updator_module.os, "makedirs", lambda path, exist_ok=True: None
+    )
+    monkeypatch.setattr(plugin_updator_module.os.path, "join", ntpath.join)
+    monkeypatch.setattr(plugin_updator_module.os.path, "normpath", ntpath.normpath)
+    monkeypatch.setattr(plugin_updator_module.os.path, "isdir", lambda path: False)
+    monkeypatch.setattr(plugin_updator_module.os.path, "exists", lambda path: False)
+    monkeypatch.setattr(
+        plugin_updator_module.zipfile,
+        "ZipFile",
+        lambda path, mode: _FakeZipArchive(
+            [archive_root, f"{archive_root}.dockerignore"]
+        ),
+    )
+    monkeypatch.setattr(plugin_updator_module.logger, "info", lambda message: None)
+    monkeypatch.setattr(plugin_updator_module.logger, "warning", lambda message: None)
+    monkeypatch.setattr(plugin_updator_module.os, "listdir", fake_listdir)
+    monkeypatch.setattr(
+        plugin_updator_module.shutil,
+        "move",
+        lambda src, dst: captured.setdefault("move", (src, dst)),
+    )
+    monkeypatch.setattr(
+        plugin_updator_module.shutil,
+        "rmtree",
+        lambda path, onerror=None: captured.setdefault("cleanup", path),
+    )
+    monkeypatch.setattr(
+        plugin_updator_module.os,
+        "remove",
+        lambda path: captured.setdefault("removed", path),
+    )
+
+    PluginUpdator.__new__(PluginUpdator).unzip_file("temp.zip", target_dir)
+
+    assert captured["listdir"] == expected_root
+    assert captured["move"] == (expected_file, target_dir)
+    assert captured["cleanup"] == expected_root

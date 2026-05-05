@@ -231,33 +231,41 @@ class RepoZipUpdator:
             return author, repo, branch
         raise ValueError("无效的 GitHub URL")
 
+    @staticmethod
+    def _normalize_archive_root_dir(path: str) -> str:
+        normalized = os.path.normpath(path)
+        return "" if normalized == "." else normalized
+
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = z.namelist()[0]
+            update_dir = self._normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
+        update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
+        files = os.listdir(update_root_path)
         for f in files:
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            elif os.path.exists(os.path.join(target_dir, f)):
-                os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
+            target_item_path = os.path.normpath(os.path.join(target_dir, f))
+            if os.path.isdir(update_item_path):
+                if os.path.exists(target_item_path):
+                    shutil.rmtree(target_item_path, onerror=on_error)
+            elif os.path.exists(target_item_path):
+                os.remove(target_item_path)
+            shutil.move(update_item_path, target_dir)
 
         try:
             logger.debug(
-                f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除临时更新文件: {zip_path} 和 {update_root_path}",
             )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+            shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
         except BaseException:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}",
             )
 
     def format_name(self, name: str) -> str:
